@@ -1,29 +1,36 @@
 class Cell:
+    """
+        A class representing the living entity of the Game Of Life
 
-    def __init__(self, pos_x, pos_y, is_alive, number_of_neighbours):
+        Attributes
+        ----------
+        pos_x : int
+            X coordinate of the cell
+        pos_y : int
+            Y coordinate of the cell
+        is_active : bool
+            Status of the cell if it should be rendered during next iteration or not
+        number_of_neighbours : int
+            The number of living neighbours of the cell. It indicates wheter during next iteration
+            cell should be dead or alive
+    """
+
+    def __init__(self, pos_x, pos_y, is_active, number_of_neighbours):
         self.pos_x = pos_x
         self.pos_y = pos_y
 
-        self.is_alive = is_alive
+        self.is_active = is_active
         self.number_of_neighbours = number_of_neighbours
 
     def move(self):
         """
-            Make move of cell, based on rules of Game Of Life.
+            Set the status of the cell for next iteration, based on the rules of Game Of Life.
             For more info check https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life
         """
 
-        if self.is_alive:
+        if self.is_active:
             if self.number_of_neighbours not in [2, 3]:
-                self.is_alive = False
+                self.is_active = False
         else:
             if self.number_of_neighbours == 3:
-                self.is_alive = True
-
-    def print_cell(self):
-        """
-            Print GREEN 'O' for cells which are alive.
-            Otherwise print RED '+'.
-        """
-
-        print('\033[92mO\033[00m', end='') if self.is_alive else print('\033[91m+\033[00m', end='')
+                self.is_active = True

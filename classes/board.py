@@ -1,109 +1,152 @@
-# The 1st version of the Game Of Life -> Fixed board size
-
-
-import re
-
 from time import sleep
 from classes.cell import Cell
+from utils.helper import print_cell
 
 
 class Board:
+    """
+        A class representing board on which cells are spawn.
+        The board is rendered by RED '+' signs and GREEN 'O' characters.
 
-    def __init__(self, init_cells_coord):
-        self.width = 20
-        self.height = 20
+        Attributes
+        ----------
+        active_cells : dict
+            The dictionary which contains tuples with active cells coordinates as the key
+            and instance of the Cell class as the value.
+        active_cells_candidates : dict
+            The dictionary which contains tuples with coordinates of cells, which possibly can be 
+            active cells in the next stage as the key and instance of the Cell class as the value.
+        iteration : int
+            The number of iteration of the Game Of Life.
+        offset : int
+            The minimal distance between the edge of the rendered board and the outermost active cell.
+        border_position : dict
+            The absolute position of each edge of the rendered board from the previous step
+        SLEEP_TIME : float
+            Time in seconds for how long should game sleep between iterations.
+    """
 
-        self.init_cells_coord = init_cells_coord
+    def __init__(self, active_cells, offset):
+        self.active_cells = active_cells
+        self.iteration = 0
 
-    def step_zero(self):
-        """Method which initialize the board, based on initial coordninations of cells which are alive"""
+        self.offset = offset
+        self.border_position = {
+            'top': offset,
+            'right': offset,
+            'bottom': offset,
+            'left': offset
+        }
 
-        self.cells = [[Cell(row, col, False, 0) for row in range(self.width)] for col in range(self.height)]
-        for init_cell in self.init_cells_coord:
-            pos_x = init_cell[0]
-            pos_y = init_cell[1]
-            self.cells[pos_y][pos_x].is_alive = True
+        self.SLEEP_TIME = 0.5
 
-        self.render_board()
+    def remove_dead_cells(self, cells):
+        """
+            Apply move() method from Cell class to each Cell object in cells dictionary.
+            If cell in the next step will be dead, remove its key from the dictionary.
+        """
 
-    def move_cells(self):
-        """Apply move() method from Cell class to each Cell object in self.cells 2D list"""
+        cells_copy = cells.copy()
+        for coordinates, cell in cells_copy.items():
+            cell.move()
+            if not cell.is_active:
+                del cells[coordinates]                
 
-        for row in self.cells:
-            for cell in row:
-                cell.move()
+    def calculate_next_step(self, cells, candidates=True):
+        """
+            For every cell in `self.active_cells` and `self.active_cells_candidates take their closest surroundings.
+            - If the active cell has coordinates (3, 2), the surrounding elements for discussion will have coordinates:
+              (2, 1), (3, 1), (4, 1), (3, 1), (3, 3) etc. but NOT (3, 2).
+            - If there is an active cell on discussed coordinates, inrement the number of its neighbours. Otherwise,
+              if we are discussing the surroundings of the cells which belong to `self.active_cells dictionary`, mark
+              the coordinates as possible active cell for the next iteration due to one of the rules of the Game Of Life.
+        """
 
-        self.render_board()
+        for coordinates, cell in cells.items():
+            for y in range(cell.pos_y - 1, cell.pos_y + 2):
+                for x in range(cell.pos_x - 1, cell.pos_x + 2):
+                    if (x, y) == coordinates:
+                        continue
 
-    def count_neighbours(self):
-        """Method which iteratively goes through `self.cells` 2D list and count adjacent cells which are alive"""
+                    if (x, y) in self.active_cells:
+                        cell.number_of_neighbours += 1
+                    elif candidates:
+                        self.active_cells_candidates[(x, y)] = Cell(x, y, False, 0)
 
-        for row in self.cells:
-            for cell in row:
-                # clean counter each round
-                cell.number_of_neighbours = 0
-                # X and Y coordinates of each Cell object
-                x_cell_pos = cell.pos_x
-                y_cell_pos = cell.pos_y
-                # The tuples describing the surrounding of each Cell object which should be inspected
-                x_neigh_range = (x_cell_pos - 1 if x_cell_pos > 0 else 0, x_cell_pos + 2 if x_cell_pos < self.width - 1 else self.width)
-                y_neigh_range = (y_cell_pos - 1 if y_cell_pos > 0 else 0, y_cell_pos + 2 if y_cell_pos < self.height - 1 else self.height)
-                for x_neigh_pos in range(*x_neigh_range):
-                    for y_neigh_pos in range(*y_neigh_range):
-                        # If the coordinates equals, that's the same Cell object
-                        if x_neigh_pos == x_cell_pos and  y_neigh_pos == y_cell_pos:
-                            continue
+    def prepare_for_next_step(self):
+        """
+            Set critical parametres to their initial states:
+            - Number of neighbours of each cell should be `0` before calculating the next step.
+            - Active cell candidates dictionary should be empty before calculating the next step. 
+        """
 
-                        # If the neighbour cell is alive, increment neighbours counter of current cell
-                        if self.cells[y_neigh_pos][x_neigh_pos].is_alive:
-                            cell.number_of_neighbours += 1
+        for cell in self.active_cells.values():
+            cell.number_of_neighbours = 0
+
+        self.active_cells_candidates = {}
+
+    def merge_active_cells(self):
+        """
+            Merge actual active cells with the active cell candidates.
+            Increment the number of iteration.
+        """
+
+        self.active_cells.update(self.active_cells_candidates)
+        self.iteration += 1
 
     def render_board(self):
-        """Render board with '+' and 'O' characters dependent on each cell's live status"""
+        """
+            Method which renders the board based on the positions of active cells and the minimal
+            offset from the outermost cells. (To actually see the motion of the cells.)
+        """
 
-        print(' ' + '_'*self.width + ' ')
-        for row in self.cells:
-            print('|', end='')
-            for cl in row:
-                cl.print_cell()
-            print('|')
-        print(' ' + '_'*self.width + ' ')
+        # Print the number of current iteration
+        print(f'\nIteration number: {self.iteration}')
+
+        # Get the minimal and maximal coordinates in each axis
+        # If the ValueError is raised -> there is no active cell, and the population exctint
+        try:
+            x_min = min(self.active_cells.keys(), key=lambda x: x[0])[0]
+            x_max = max(self.active_cells.keys(), key=lambda x: x[0])[0]
+            y_min = min(self.active_cells.keys(), key=lambda x: x[1])[1]
+            y_max = max(self.active_cells.keys(), key=lambda x: x[1])[1]
+        except ValueError:
+            # Render board with RED '+' sign with the same dimensions as in iteration before
+            for _ in range(self.border_position['top'], self.border_position['bottom'] + 1):
+                for _ in range(self.border_position['left'], self.border_position['right'] + 1):
+                    print_cell('dead')
+                print()
+            exit()
+
+        # Count the offset, to see the motion.
+        # We do not want to shrink the distance from the border compared to the iteration before
+        if y_min - self.offset < self.border_position['top']:
+            self.border_position['top'] = y_min - self.offset
+        if y_max + self.offset > self.border_position['bottom']:
+            self.border_position['bottom'] = y_max + self.offset
+        if x_min - self.offset < self.border_position['left']:
+            self.border_position['left'] = x_min - self.offset
+        if x_max + self.offset > self.border_position['right']:
+            self.border_position['right'] = x_max + self.offset
+
+        # Render the board based on positions of active cells
+        for y in range(self.border_position['top'], self.border_position['bottom'] + 1):
+            for x in range(self.border_position['left'], self.border_position['right'] + 1):
+                print_cell('active') if (x, y) in self.active_cells else print_cell('dead')
+            print()
 
     def play(self):
-        """Method which starts simulation."""
-
-        self.step_zero()
-        sleep(0.5)
+        """Method which starts the simulation."""
 
         while True:
-            self.count_neighbours()
-            self.move_cells()
+            self.render_board()
+            self.prepare_for_next_step()
+            self.calculate_next_step(self.active_cells)
+            self.calculate_next_step(self.active_cells_candidates, candidates=False)
 
-            sleep(0.5)
+            self.remove_dead_cells(self.active_cells)
+            self.remove_dead_cells(self.active_cells_candidates)
 
-    @staticmethod
-    def load_data_from_file(file_path):
-        """Load tuples from file and return them as list of tuples for further processing."""
-        default_coord = [(7, 6),
-                         (7, 7),
-                         (7, 8),
-                         (6, 7),
-                         (5, 8)]
+            self.merge_active_cells()
 
-        try:
-            with open(file_path, 'r') as input_file:
-                # Parse coordinates tuples from input file
-                # If tuples was not found, or the path to file is wrong,
-                # return default coordinates
-                content = input_file.read()
-                pattern = r'\(\d+, \d+\)'
-                matches = re.findall(pattern, content)
-                try:
-                    return map(eval, matches)
-                except TypeError as e:
-                    print(f'Provided file with bad / wrong formatting. Returning the default cell coordinates.') 
-                    return default_coord               
-        except FileNotFoundError:
-            print('Couldn\'t find file on desired path. Returning the default cell coordinates.')
-            return default_coord
-    
+            sleep(self.SLEEP_TIME)
